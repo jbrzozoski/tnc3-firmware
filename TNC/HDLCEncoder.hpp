@@ -185,6 +185,7 @@ struct Encoder {
         ones_ = 0;      // Reset the ones count for each frame.
 
         frame->add_fcs();
+        frame->frame_and_stuff_data();
 
         if (send_delay_) {
             if (not do_csma()) {
@@ -198,9 +199,8 @@ struct Encoder {
             send_delay_ = false;
         }
 
-        for (auto c : *frame) send(c);
+        for (auto c : *frame) send_raw(c);
         release(frame);
-        send_tail();
     }
 
     void send_delay() {
@@ -210,43 +210,13 @@ struct Encoder {
         for (size_t i = 0; i != tmp; i++) {
             send_raw(IDLE);
         }
-        send_raw(FLAG);
     }
 
-    void send_fcs(uint16_t fcs) {
-        uint8_t low = fcs & 0xFF;
-        uint8_t high = (fcs >> 8) & 0xFF;
-
-        send(low);
-        send(high);
-    }
-
-    void send_tail() {
-        send_raw(FLAG);
-    }
-
-    // No bit stuffing for PREAMBLE and TAIL
+    // All bit stuff was done previously in the buffer
     void send_raw(uint8_t byte) {
         for (size_t i = 0; i != 8; i++) {
             uint8_t bit = byte & 1;
             modulator_->send(nrzi_.encode(bit));
-            byte >>= 1;
-        }
-    }
-
-    void send(uint8_t byte) {
-        for (size_t i = 0; i != 8; i++) {
-            uint8_t bit = byte & 1;
-            modulator_->send(nrzi_.encode(bit));
-            if (bit) {
-                ++ones_;
-                if (ones_ == 5) {
-                    modulator_->send(nrzi_.encode(0));
-                    ones_ = 0;
-                }
-            } else {
-                ones_ = 0;
-            }
             byte >>= 1;
         }
     }

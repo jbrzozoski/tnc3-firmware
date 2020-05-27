@@ -137,6 +137,96 @@ public:
         crc_ = compute_crc(data_.begin());
         complete_ = true;
     }
+
+    void frame_and_stuff_data() {
+        // I went back and forth several times on how to do this "cleanly"...
+        // - I initially wanted to just allocate a whole new IOFrame up in the caller, but then realized I couldn't duplicate the meta-data like crc, fcs, frame_type, complete...
+        // - Then I wanted to replace the contents of the current data_, but it's not a pointer and I can't just hijack it...
+        // - So, for the time being, I'm just double-copying out to a temp data_type and then back in.  It sucks, but I wanted to get something done and prove it worked before working to make it efficient...
+        auto temp_buffer = data_type();
+
+        // TODO !!! Add FLAG bytes (0x7E) at beginning of frame
+        temp_buffer.push_back(0x7E);
+
+        // TODO !!! Walk full size of data, and do bit stuffing
+        uint8_t output_byte = 0x00;
+        int output_bits = 0;
+        auto bytes_to_read = data_.size();
+        auto data_in = data_.begin();
+        int consecutive_ones = 0;
+        uint8_t byte;
+        while (bytes_to_read) {
+            byte = *data_in;
+            std::advance(data_in, 1);
+            bytes_to_read--;
+            for (int i = 0; i != 8; i++) {
+                uint8_t bit = byte & 1;
+
+                if (bit) {
+                    output_byte |= (0x01 << output_bits);
+                    ++consecutive_ones;
+                } else {
+                    consecutive_ones = 0;
+                }
+                ++output_bits;
+                if (output_bits >= 8) {
+                    temp_buffer.push_back(output_byte);
+                    output_byte = 0x00;
+                    output_bits = 0;
+                }
+                if (consecutive_ones >= 5) {
+                    ++output_bits;
+                    if (output_bits >= 8) {
+                        temp_buffer.push_back(output_byte);
+                        output_byte = 0x00;
+                        output_bits = 0;
+                    }
+                    consecutive_ones = 0;
+                }
+                byte >>= 1;
+            }
+        }
+
+        // TODO !!! Add FLAG bytes (0x7E) at end of frame
+        byte = 0x7E;
+        for (int i = 0; i != 8; i++) {
+            uint8_t bit = byte & 1;
+
+            if (bit) {
+                output_byte |= (0x01 << output_bits);
+            }
+            ++output_bits;
+            if (output_bits >= 8) {
+                temp_buffer.push_back(output_byte);
+                output_byte = 0x00;
+                output_bits = 0;
+            }
+            byte >>= 1;
+        }
+
+        // Need to add more FLAG bits to pad to a full byte...
+        byte = 0x7E;
+        while (output_bits != 0)
+        {
+            uint8_t bit = byte & 1;
+
+            if (bit) {
+                output_byte |= (0x01 << output_bits);
+            }
+            ++output_bits;
+            if (output_bits >= 8) {
+                temp_buffer.push_back(output_byte);
+                output_byte = 0x00;
+                output_bits = 0;
+            }
+            byte >>= 1;
+        }
+
+        // TODO - Now copy this data back into the IOFrame buffer...
+        data_.clear();
+        for (auto c : temp_buffer) data_.push_back(c);
+    }
+
 };
 
 template <typename Frame, size_t SIZE = 16>
