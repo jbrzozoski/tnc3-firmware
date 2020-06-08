@@ -143,7 +143,7 @@ public:
         // - I initially wanted to just allocate a whole new IOFrame up in the caller, but then realized I couldn't duplicate the meta-data like crc, fcs, frame_type, complete...
         // - Then I wanted to replace the contents of the current data_, but it's not a pointer and I can't just hijack it...
         // - So, for the time being, I'm just double-copying out to a temp data_type and then back in.  It sucks, but I wanted to get something done and prove it worked before working to make it efficient...
-        auto temp_buffer = data_type();
+        data_type temp_buffer;
 
         // TODO !!! Add FLAG bytes (0x7E) at beginning of frame
         temp_buffer.push_back(0x7E);
@@ -187,7 +187,7 @@ public:
             }
         }
 
-        // TODO !!! Add FLAG bytes (0x7E) at end of frame
+        // Make sure we have one FLAG byte in matching bit-stuffing alignment at the end of the frame
         byte = 0x7E;
         for (int i = 0; i != 8; i++) {
             uint8_t bit = byte & 1;
@@ -204,7 +204,7 @@ public:
             byte >>= 1;
         }
 
-        // Need to add more FLAG bits to pad to a full byte...
+        // Add partial FLAG bits to pad to a full byte...
         byte = 0x7E;
         while (output_bits != 0)
         {
@@ -221,6 +221,8 @@ public:
             }
             byte >>= 1;
         }
+
+        // TODO - Add extra FLAG and 0 padding to the over-the-air and RS sizes if we are going to be doing FX.25?
 
         // TODO - Now copy this data back into the IOFrame buffer...
         data_.clear();
