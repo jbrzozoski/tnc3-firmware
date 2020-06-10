@@ -97,33 +97,33 @@ struct rs_config {
             genpoly[i] = index_of[genpoly[i]];
         }
 
-        // diagnostic prints
-        printf("Alpha To:\n");
-        for (i = 0; i < sizeof(DTYPE) * (NN + 1); i++) {
-            printf("%02x ", alpha_to[i]);
-            if ((i % 16) == 15) {
-                printf("\n");
-            }
-        }
-        printf("\n");
-
-        printf("Index Of:\n");
-        for (i = 0; i < sizeof(DTYPE) * (NN + 1); i++) {
-            printf("%02x ", index_of[i]);
-            if ((i % 16) == 15) {
-                printf("\n");
-            }
-        }
-        printf("\n");
-
-        printf("GenPoly:\n");
-        for (i = 0; i <= NROOTS; i++) {
-            printf("%02x ", genpoly[i]);
-            if ((i % 16) == 15) {
-                printf("\n");
-            }
-        }
-        printf("\n");
+        // // diagnostic prints
+        // printf("Alpha To:\n");
+        // for (i = 0; i < sizeof(DTYPE) * (NN + 1); i++) {
+        //     printf("%02x ", alpha_to[i]);
+        //     if ((i % 16) == 15) {
+        //         printf("\n");
+        //     }
+        // }
+        // printf("\n");
+        //
+        // printf("Index Of:\n");
+        // for (i = 0; i < sizeof(DTYPE) * (NN + 1); i++) {
+        //     printf("%02x ", index_of[i]);
+        //     if ((i % 16) == 15) {
+        //         printf("\n");
+        //     }
+        // }
+        // printf("\n");
+        //
+        // printf("GenPoly:\n");
+        // for (i = 0; i <= NROOTS; i++) {
+        //     printf("%02x ", genpoly[i]);
+        //     if ((i % 16) == 15) {
+        //         printf("\n");
+        //     }
+        // }
+        // printf("\n");
     }
 
     //void encode(IoFrame* frame_input, IoFrame* fec_output) const
@@ -159,7 +159,6 @@ struct rs_config {
             }
         }
 
-
         //fec_output.clear();
         //for (i = 0; i < NROOTS; i++) {
         //    bb.push_back(fec_work[i]);
@@ -169,19 +168,20 @@ struct rs_config {
 };
 
 struct fx25 {
-    const unsigned FX25_BLOCK_SIZE = 255;
+    static const unsigned FX25_BLOCK_SIZE = 255;
 
     enum RS_CONFIG_ENUM {
+        NO_RS_CONFIG = -1,
         RS_255_239 = 0,
-        RS_255_223 = 1,
-        RS_255_191 = 2,
+        RS_255_223,
+        RS_255_191,
         MAX_RS_CONFIG_ENUM
     };
 
     const struct rs_config<uint8_t> RS_CONFIGS[MAX_RS_CONFIG_ENUM] = {
-        [RS_255_239] = rs_config(8, 0x11d, 1, 1, 16), // RS(255, 239) 16-byte check value, 239 information bytes
-        [RS_255_223] = rs_config(8, 0x11d, 1, 1, 32), // RS(255, 223) 32-byte check value, 223 information bytes
-        [RS_255_191] = rs_config(8, 0x11d, 1, 1, 64), // RS(255, 191) 64-byte check value, 191 information bytes
+        [RS_255_239] = rs_config<uint8_t>(8, 0x11d, 1, 1, 16), // RS(255, 239) 16-byte check value, 239 information bytes
+        [RS_255_223] = rs_config<uint8_t>(8, 0x11d, 1, 1, 32), // RS(255, 223) 32-byte check value, 223 information bytes
+        [RS_255_191] = rs_config<uint8_t>(8, 0x11d, 1, 1, 64), // RS(255, 191) 64-byte check value, 191 information bytes
     };
 
     struct correlation_tag_s {
@@ -193,37 +193,46 @@ struct fx25 {
         enum RS_CONFIG_ENUM rs_config_index; // Index into RS_CONFIGS array.
     };
 
-    const unsigned NUM_TAGS_DEFINED = 16;
-    const unsigned CTAG_MIN = 0x01;
-    const unsigned CTAG_MAX = 0x0B;
-    const struct correlation_tag_s TAGS[NUM_TAGS_DEFINED] = {
-        /* Tag_00 */{ 0x566ED2717946107ELL,   0,   0,   0,   0, -1 },  //  Reserved
+    enum FX25_CONFIG_ENUM {
+        NO_FX_CONFIG = -1,
+        FX_CONFIG_255_239 = 0,
+        FX_CONFIG_144_128,
+        FX_CONFIG_80_64,
+        FX_CONFIG_48_32,
+        FX_CONFIG_255_223,
+        FX_CONFIG_160_128,
+        FX_CONFIG_96_64,
+        FX_CONFIG_64_32,
+        FX_CONFIG_255_191,
+        FX_CONFIG_192_128,
+        FX_CONFIG_128_64,
+        MAX_FX_CONFIG
+    };
 
-        /* Tag_01 */{ 0xB74DB7DF8A532F3ELL, 255, 239, 255, 239, RS_255_239 },  //  RS(255, 239) 16-byte check value, 239 information bytes
-        /* Tag_02 */{ 0x26FF60A600CC8FDELL, 144, 128, 255, 239, RS_255_239 },  //  RS(144,128) - shortened RS(255, 239), 128 info bytes
-        /* Tag_03 */{ 0xC7DC0508F3D9B09ELL,  80,  64, 255, 239, RS_255_239 },  //  RS(80,64) - shortened RS(255, 239), 64 info bytes
-        /* Tag_04 */{ 0x8F056EB4369660EELL,  48,  32, 255, 239, RS_255_239 },  //  RS(48,32) - shortened RS(255, 239), 32 info bytes
-
-        /* Tag_05 */{ 0x6E260B1AC5835FAELL, 255, 223, 255, 223, RS_255_223 },  //  RS(255, 223) 32-byte check value, 223 information bytes
-        /* Tag_06 */{ 0xFF94DC634F1CFF4ELL, 160, 128, 255, 223, RS_255_223 },  //  RS(160,128) - shortened RS(255, 223), 128 info bytes
-        /* Tag_07 */{ 0x1EB7B9CDBC09C00ELL,  96,  64, 255, 223, RS_255_223 },  //  RS(96,64) - shortened RS(255, 223), 64 info bytes
-        /* Tag_08 */{ 0xDBF869BD2DBB1776LL,  64,  32, 255, 223, RS_255_223 },  //  RS(64,32) - shortened RS(255, 223), 32 info bytes
-
-        /* Tag_09 */{ 0x3ADB0C13DEAE2836LL, 255, 191, 255, 191, RS_255_191 },  //  RS(255, 191) 64-byte check value, 191 information bytes
-        /* Tag_0A */{ 0xAB69DB6A543188D6LL, 192, 128, 255, 191, RS_255_191 },  //  RS(192, 128) - shortened RS(255, 191), 128 info bytes
-        /* Tag_0B */{ 0x4A4ABEC4A724B796LL, 128,  64, 255, 191, RS_255_191 },  //  RS(128, 64) - shortened RS(255, 191), 64 info bytes
-
-        /* Tag_0C */{ 0x0293D578626B67E6LL,   0,   0,   0,   0, -1 },  //  Undefined
-        /* Tag_0D */{ 0xE3B0B0D6917E58A6LL,   0,   0,   0,   0, -1 },  //  Undefined
-        /* Tag_0E */{ 0x720267AF1BE1F846LL,   0,   0,   0,   0, -1 },  //  Undefined
-        /* Tag_0F */{ 0x93210201E8F4C706LL,   0,   0,   0,   0, -1 }   //  Undefined
-    }
+    const struct correlation_tag_s TAGS[MAX_FX_CONFIG] = {
+        // [FX_CONFIG_TAG_00] = { 0x566ED2717946107ELL,   0,   0,   0,   0, NO_RS_CONFIG },  //  Reserved
+        [FX_CONFIG_255_239] = { 0xB74DB7DF8A532F3ELL, 255, 239, 255, 239, RS_255_239 },  //  RS(255, 239) 16-byte check value, 239 information bytes
+        [FX_CONFIG_144_128] = { 0x26FF60A600CC8FDELL, 144, 128, 255, 239, RS_255_239 },  //  RS(144,128) - shortened RS(255, 239), 128 info bytes
+        [FX_CONFIG_80_64]   = { 0xC7DC0508F3D9B09ELL,  80,  64, 255, 239, RS_255_239 },  //  RS(80,64) - shortened RS(255, 239), 64 info bytes
+        [FX_CONFIG_48_32]   = { 0x8F056EB4369660EELL,  48,  32, 255, 239, RS_255_239 },  //  RS(48,32) - shortened RS(255, 239), 32 info bytes
+        [FX_CONFIG_255_223] = { 0x6E260B1AC5835FAELL, 255, 223, 255, 223, RS_255_223 },  //  RS(255, 223) 32-byte check value, 223 information bytes
+        [FX_CONFIG_160_128] = { 0xFF94DC634F1CFF4ELL, 160, 128, 255, 223, RS_255_223 },  //  RS(160,128) - shortened RS(255, 223), 128 info bytes
+        [FX_CONFIG_96_64]   = { 0x1EB7B9CDBC09C00ELL,  96,  64, 255, 223, RS_255_223 },  //  RS(96,64) - shortened RS(255, 223), 64 info bytes
+        [FX_CONFIG_64_32]   = { 0xDBF869BD2DBB1776LL,  64,  32, 255, 223, RS_255_223 },  //  RS(64,32) - shortened RS(255, 223), 32 info bytes
+        [FX_CONFIG_255_191] = { 0x3ADB0C13DEAE2836LL, 255, 191, 255, 191, RS_255_191 },  //  RS(255, 191) 64-byte check value, 191 information bytes
+        [FX_CONFIG_192_128] = { 0xAB69DB6A543188D6LL, 192, 128, 255, 191, RS_255_191 },  //  RS(192, 128) - shortened RS(255, 191), 128 info bytes
+        [FX_CONFIG_128_64]  = { 0x4A4ABEC4A724B796LL, 128,  64, 255, 191, RS_255_191 },  //  RS(128, 64) - shortened RS(255, 191), 64 info bytes
+        // [FX_CONFIG_TAG_0C] = { 0x0293D578626B67E6LL,   0,   0,   0,   0, NO_RS_CONFIG },  //  Undefined
+        // [FX_CONFIG_TAG_0D] = { 0xE3B0B0D6917E58A6LL,   0,   0,   0,   0, NO_RS_CONFIG },  //  Undefined
+        // [FX_CONFIG_TAG_0E] = { 0x720267AF1BE1F846LL,   0,   0,   0,   0, NO_RS_CONFIG },  //  Undefined
+        // [FX_CONFIG_TAG_0F] = { 0x93210201E8F4C706LL,   0,   0,   0,   0, NO_RS_CONFIG }   //  Undefined
+    };
 
     fx25() {
         // Verify integrity of tables and assumptions.
         // This also does a quick check for the popcount function.
-        for (int j = 0; j < NUM_TAGS_DEFINED; j++) {
-            for (int k = 0; k < NUM_TAGS_DEFINED; k++) {
+        for (int j = 0; j < MAX_FX_CONFIG; j++) {
+            for (int k = 0; k < MAX_FX_CONFIG; k++) {
                 if (j == k) {
                     assert(__builtin_popcountll(TAGS[j].value ^ TAGS[k].value) == 0);
                 } else {
@@ -232,58 +241,41 @@ struct fx25 {
             }
         }
 
-        for (int j = CTAG_MIN; j <= CTAG_MAX; j++) {
+        for (int j = 0; j < MAX_FX_CONFIG; j++) {
             assert(TAGS[j].n_block_radio - TAGS[j].k_data_radio == RS_CONFIGS[TAGS[j].rs_config_index].NROOTS);
             assert(TAGS[j].n_block_rs - TAGS[j].k_data_rs == RS_CONFIGS[TAGS[j].rs_config_index].NROOTS);
             assert(TAGS[j].n_block_rs == FX25_BLOCK_SIZE);
         }
-
-        assert(pick_mode(1, 239) == 1);
-        assert(pick_mode(1, 240) == -1);
-
-        assert(pick_mode(5, 223) == 5);
-        assert(pick_mode(5, 224) == -1);
-
-        assert(pick_mode(9, 191) == 9);
-        assert(pick_mode(9, 192) == -1);
-
-        assert(pick_mode(16, 32) == 4);
-        assert(pick_mode(16, 64) == 3);
-        assert(pick_mode(16, 128) == 2);
-        assert(pick_mode(16, 239) == 1);
-        assert(pick_mode(16, 240) == -1);
-
-        assert(pick_mode(32, 32) == 8);
-        assert(pick_mode(32, 64) == 7);
-        assert(pick_mode(32, 128) == 6);
-        assert(pick_mode(32, 223) == 5);
-        assert(pick_mode(32, 234) == -1);
-
-        assert(pick_mode(64, 64) == 11);
-        assert(pick_mode(64, 128) == 10);
-        assert(pick_mode(64, 191) == 9);
-        assert(pick_mode(64, 192) == -1);
     }
 
-    int pick_mode(int fx_mode, int dlen) const {
-        // Does it look like fx_mode is a direct index to a usable TAGS entry?
-        if (fx_mode >= CTAG_MIN && fx_mode <= CTAG_MAX) {
-            // If so, just return the index back or fail based on whether the dlen will fit
-            return ((dlen <= TAGS[fx_mode].k_data_radio) ? fx_mode : -1);
+    int pick_mode(int dlen) const {
+        // Based off of WB2OSZ's notes on how the UZ7HO modem picked encoding levels...
+        // (Let everyone else do the work!)
+        // Basic idea is:
+        // - For payloads up to 191 bytes, find the least overhead that will provide at least 25% correction
+        // - For payloads of 191 bytes or larger, use the most correction that will still fit in 255 bytes total
+        if (dlen <= 32) {
+            return FX_CONFIG_48_32;
         }
-
-        // Otherwise, assume fx_mode is a request for a number of NROOTS,
-        // and find the smallest mode with that number that will fit dlen data
-        for (int k = CTAG_MAX; k >= CTAG_MIN; k--) {
-            if ((fx_mode == RS_CONFIGS[TAGS[k].rs_config_index].NROOTS) &&
-                (dlen <= TAGS[fx_mode].k_data_radio)) {
-                return (k);
-            }
+        if (dlen <= 64) {
+            return FX_CONFIG_80_64;
         }
-        return (-1);
+        if (dlen <= 128) {
+            return FX_CONFIG_160_128;
+        }
+        if (dlen <= 191) {
+            return FX_CONFIG_255_191;
+        }
+        if (dlen <= 223) {
+            return FX_CONFIG_255_223;
+        }
+        if (dlen <= 239) {
+            return FX_CONFIG_255_239;
+        }
+        return NO_FX_CONFIG;
     }
 
     // void encode(IoFrame *frame) const {
     // }
-}
+};
 
