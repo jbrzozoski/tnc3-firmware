@@ -3,11 +3,15 @@
 // #include "HdlcFrame.hpp"
 // #include "main.h"
 // #include <cmsis_os.h>
-// #include <cstdint>
+#include <cstdint>
 #include <cstring>
 #include <cstdio>
 
 //namespace mobilinkd { namespace tnc {
+
+// TODO - Make these dynamic based on the parameter sets we are using
+#define MAX_LOG_TABLE_SIZE 256
+#define MAX_GENPOLY_SIZE  65
 
 // The ReedSolomon engine takes several constant configuration values.
 // Originally I was going to make them parameters to the constructor, but many of them
@@ -15,23 +19,25 @@
 // It is wildly improbably that someone might want to try a different parameter value at runtime, so
 // instead of playing games with allocating memory as part of the constructor, I just moved all the
 // parameters into the template.  I added static asserts for validity checking of the parameters.
-template <typename DTYPE, uint16_t SYMSIZE, uint16_t GFPOLY, uint8_t FCR, uint8_t PRIM, uint16_t NROOTS>
+template <typename DTYPE>
 struct rs_config {
     // DTYPE: data type being operated on (expected to be uint8_t)
-    // SYMSIZE: Bits per symbol (aka MM in some reference code) (expected to be 8)
-    // GFPOLY: Field generator polynomial coefficients
-    // FCR: First consecutive root, index form
-    // PRIM: Primitive element, index form
-    // NROOTS: Number of generator roots = number of parity symbols
+    const uint16_t SYMSIZE; /* Bits per symbol (aka MM in some reference code) (expected to be 8) */
+    const uint16_t GFPOLY; /* Field generator polynomial coefficients */
+    const uint8_t FCR; /* First consecutive root, index form */
+    const uint8_t PRIM; /* Primitive element, index form */
+    const uint16_t NROOTS; /* Number of generator roots = number of parity symbols */
+    const uint16_t NN = ((1<<SYMSIZE)-1); /* Symbols per block */
+    const uint16_t A0 = NN;
     static_assert(SYMSIZE <= (8 * sizeof(DTYPE)));
     static_assert(FCR < (1 << SYMSIZE));
     static_assert((PRIM != 0) && (PRIM < (1 << SYMSIZE)));
     static_assert(NROOTS < (1 << SYMSIZE));
-    const uint16_t NN = ((1<<SYMSIZE)-1); /* Symbols per block */
-    const uint16_t A0 = NN;
-    uint8_t alpha_to[(sizeof(DTYPE) * (((1<<SYMSIZE)-1) + 1))]; /* log lookup table */
-    uint8_t index_of[(sizeof(DTYPE) * (((1<<SYMSIZE)-1) + 1))]; /* Antilog lookup table */
-    uint8_t genpoly[(sizeof(DTYPE) * (NROOTS + 1))];    /* Generator polynomial */
+    static_assert((sizeof(DTYPE) * (NN + 1)) <= MAX_LOG_TABLE_SIZE)
+    static_assert((sizeof(DTYPE) * (NROOTS + 1)) <= MAX_GENPOLY_SIZE)
+    uint8_t alpha_to[MAX_LOG_TABLE_SIZE]; /* log lookup table */
+    uint8_t index_of[MAX_LOG_TABLE_SIZE]; /* Antilog lookup table */
+    uint8_t genpoly[MAX_GENPOLY_SIZE];    /* Generator polynomial */
     uint8_t iprim;       /* prim-th root of 1, index form */
 
     inline uint16_t modnn(uint16_t x) const {
@@ -42,8 +48,8 @@ struct rs_config {
         return x;
     }
 
-    rs_config()
-    : alpha_to(), index_of(), genpoly(), iprim()
+    rs_config(uint16_t symsize, uint16_t gfpoly, uint8_t fcr, uint8_t prim, uint16_t nroots)
+    : SYMSIZE(symsize), GFPOLY(gfpoly), FCR(fcr), PRIM(prim), NROOTS(nroots), alpha_to(0), index_of(0), genpoly(0), iprim(0)
     {
         int i, j, sr, root;
 
@@ -124,30 +130,43 @@ struct rs_config {
         printf("\n");
     }
 
-    void ENCODE_RS(DTYPE * data, DTYPE * bb)
+    //void encode(IoFrame* frame_input, IoFrame* fec_output) const
+    void encode(DTYPE * input, DTYPE * output) const
     {
         int i, j;
         DTYPE feedback;
+        DTYPE fec_work[NROOTS];
 
-        // clear out the FEC data area
-        memset(bb, 0, NROOTS * sizeof(DTYPE));
+        // Frame_input is expected to be of size NN-NROOTS
+
+        // clear out the FEC work area
+        memset(fec_work, 0, sizeof(fec_work));
 
         for(i = 0; i < (NN-NROOTS); i++) {
-            feedback = index_of[data[i] ^ bb[0]];
+            // TODO - With a second fec_work array we could skip all the memmove
+            // work by just ping-ponging back and forth during the XOR for loop
+            feedback = index_of[input[i] ^ fec_work[0]];
             /* feedback term is non-zero */
             if(feedback != A0) {
                 for(j = 1; j < NROOTS; j++) {
-                    bb[j] ^= alpha_to[modnn(feedback + genpoly[NROOTS-j])];
+                    fec_work[j] ^= alpha_to[modnn(feedback + genpoly[NROOTS-j])];
                 }
             }
             /* Shift */
-            memmove(&bb[0], &bb[1], sizeof(DTYPE)*(NROOTS-1));
+            memmove(&fec_work[0], &fec_work[1], sizeof(DTYPE)*(NROOTS-1));
             if(feedback != A0) {
-                bb[NROOTS-1] = alpha_to[modnn(feedback + genpoly[0])];
+                fec_work[NROOTS-1] = alpha_to[modnn(feedback + genpoly[0])];
             } else {
-                bb[NROOTS-1] = 0;
+                fec_work[NROOTS-1] = 0;
             }
         }
+
+
+        //fec_output.clear();
+        //for (i = 0; i < NROOTS; i++) {
+        //    bb.push_back(fec_work[i]);
+        //}
+        memcpy(output, fec_work, sizeof(fec_work));
     }
 };
 
