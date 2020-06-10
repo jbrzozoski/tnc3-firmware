@@ -14,12 +14,6 @@
 #define MAX_LOG_TABLE_SIZE 256
 #define MAX_GENPOLY_SIZE  65
 
-// The ReedSolomon engine takes several constant configuration values.
-// Originally I was going to make them parameters to the constructor, but many of them
-// affect the sizes of the internal data structures needed.
-// It is wildly improbably that someone might want to try a different parameter value at runtime, so
-// instead of playing games with allocating memory as part of the constructor, I just moved all the
-// parameters into the template.  I added static asserts for validity checking of the parameters.
 template <typename DTYPE>
 struct rs_config {
     // DTYPE: data type being operated on (expected to be uint8_t)
@@ -174,90 +168,122 @@ struct rs_config {
     }
 };
 
-// struct fx25 {
-//     struct rs_config<uint8_t, 8, 0x11d, 1, 1, 16> RS_255_239;
-//     struct rs_config<uint8_t, 8, 0x11d, 1, 1, 32> RS_255_223;
-//     struct rs_config<uint8_t, 8, 0x11d, 1, 1, 64> RS_255_191;
-//
-//     fx25() {
-//         // Verify integrity of tables and assumptions.
-//         // This also does a quick check for the popcount function.
-//         for (int j = 0; j < 16; j++) {
-//             for (int k = 0; k < 16; k++) {
-//                 if (j == k) {
-//                     assert(__builtin_popcountll(tags[j].value ^ tags[k].value) == 0);
-//                 } else {
-//                     assert(__builtin_popcountll(tags[j].value ^ tags[k].value) == 32);
-//                 }
-//             }
-//         }
-//
-//         for (int j = CTAG_MIN; j <= CTAG_MAX; j++) {
-//             assert(tags[j].n_block_radio - tags[j].k_data_radio == Tab[tags[j].itab].NROOTS);
-//             assert(tags[j].n_block_rs - tags[j].k_data_rs == Tab[tags[j].itab].NROOTS);
-//             assert(tags[j].n_block_rs == FX25_BLOCK_SIZE);
-//         }
-//
-//         assert(fx25_pick_mode(1, 239) == 1);
-//         assert(fx25_pick_mode(1, 240) == -1);
-//
-//         assert(fx25_pick_mode(5, 223) == 5);
-//         assert(fx25_pick_mode(5, 224) == -1);
-//
-//         assert(fx25_pick_mode(9, 191) == 9);
-//         assert(fx25_pick_mode(9, 192) == -1);
-//
-//         assert(fx25_pick_mode(16, 32) == 4);
-//         assert(fx25_pick_mode(16, 64) == 3);
-//         assert(fx25_pick_mode(16, 128) == 2);
-//         assert(fx25_pick_mode(16, 239) == 1);
-//         assert(fx25_pick_mode(16, 240) == -1);
-//
-//         assert(fx25_pick_mode(32, 32) == 8);
-//         assert(fx25_pick_mode(32, 64) == 7);
-//         assert(fx25_pick_mode(32, 128) == 6);
-//         assert(fx25_pick_mode(32, 223) == 5);
-//         assert(fx25_pick_mode(32, 234) == -1);
-//
-//         assert(fx25_pick_mode(64, 64) == 11);
-//         assert(fx25_pick_mode(64, 128) == 10);
-//         assert(fx25_pick_mode(64, 191) == 9);
-//         assert(fx25_pick_mode(64, 192) == -1);
-//     }
-//
-//     void encode(IoFrame *frame) {
-//     }
-// }
-//
-// struct correlation_tag_s {
-//     uint64_t value;         // 64 bit value, send LSB first.
-//     int n_block_radio;      // Size of transmitted block, all in bytes.
-//     int k_data_radio;       // Size of transmitted data part.
-//     int n_block_rs;         // Size of RS algorithm block.
-//     int k_data_rs;          // Size of RS algorithm data part.
-//     int itab;               // Index into Tab array.
-// };
-//
-// static const struct correlation_tag_s tags[16] = {
-//     /* Tag_00 */{ 0x566ED2717946107ELL,   0,   0,   0,   0, -1 },  //  Reserved
-//
-//     /* Tag_01 */{ 0xB74DB7DF8A532F3ELL, 255, 239, 255, 239, 0 },  //  RS(255, 239) 16-byte check value, 239 information bytes
-//     /* Tag_02 */{ 0x26FF60A600CC8FDELL, 144, 128, 255, 239, 0 },  //  RS(144,128) - shortened RS(255, 239), 128 info bytes
-//     /* Tag_03 */{ 0xC7DC0508F3D9B09ELL,  80,  64, 255, 239, 0 },  //  RS(80,64) - shortened RS(255, 239), 64 info bytes
-//     /* Tag_04 */{ 0x8F056EB4369660EELL,  48,  32, 255, 239, 0 },  //  RS(48,32) - shortened RS(255, 239), 32 info bytes
-//
-//     /* Tag_05 */{ 0x6E260B1AC5835FAELL, 255, 223, 255, 223, 1 },  //  RS(255, 223) 32-byte check value, 223 information bytes
-//     /* Tag_06 */{ 0xFF94DC634F1CFF4ELL, 160, 128, 255, 223, 1 },  //  RS(160,128) - shortened RS(255, 223), 128 info bytes
-//     /* Tag_07 */{ 0x1EB7B9CDBC09C00ELL,  96,  64, 255, 223, 1 },  //  RS(96,64) - shortened RS(255, 223), 64 info bytes
-//     /* Tag_08 */{ 0xDBF869BD2DBB1776LL,  64,  32, 255, 223, 1 },  //  RS(64,32) - shortened RS(255, 223), 32 info bytes
-//
-//     /* Tag_09 */{ 0x3ADB0C13DEAE2836LL, 255, 191, 255, 191, 2 },  //  RS(255, 191) 64-byte check value, 191 information bytes
-//     /* Tag_0A */{ 0xAB69DB6A543188D6LL, 192, 128, 255, 191, 2 },  //  RS(192, 128) - shortened RS(255, 191), 128 info bytes
-//     /* Tag_0B */{ 0x4A4ABEC4A724B796LL, 128,  64, 255, 191, 2 },  //  RS(128, 64) - shortened RS(255, 191), 64 info bytes
-//
-//     /* Tag_0C */{ 0x0293D578626B67E6LL,   0,   0,   0,   0, -1 },  //  Undefined
-//     /* Tag_0D */{ 0xE3B0B0D6917E58A6LL,   0,   0,   0,   0, -1 },  //  Undefined
-//     /* Tag_0E */{ 0x720267AF1BE1F846LL,   0,   0,   0,   0, -1 },  //  Undefined
-//     /* Tag_0F */{ 0x93210201E8F4C706LL,   0,   0,   0,   0, -1 }   //  Undefined
-// };
+struct fx25 {
+    const unsigned FX25_BLOCK_SIZE = 255;
+
+    enum RS_CONFIG_ENUM {
+        RS_255_239 = 0,
+        RS_255_223 = 1,
+        RS_255_191 = 2,
+        MAX_RS_CONFIG_ENUM
+    };
+
+    const struct rs_config<uint8_t> RS_CONFIGS[MAX_RS_CONFIG_ENUM] = {
+        [RS_255_239] = rs_config(8, 0x11d, 1, 1, 16), // RS(255, 239) 16-byte check value, 239 information bytes
+        [RS_255_223] = rs_config(8, 0x11d, 1, 1, 32), // RS(255, 223) 32-byte check value, 223 information bytes
+        [RS_255_191] = rs_config(8, 0x11d, 1, 1, 64), // RS(255, 191) 64-byte check value, 191 information bytes
+    };
+
+    struct correlation_tag_s {
+        uint64_t value;         // 64 bit value, send LSB first.
+        int n_block_radio;      // Size of transmitted block, all in bytes.
+        int k_data_radio;       // Size of transmitted data part.
+        int n_block_rs;         // Size of RS algorithm block.
+        int k_data_rs;          // Size of RS algorithm data part.
+        enum RS_CONFIG_ENUM rs_config_index; // Index into RS_CONFIGS array.
+    };
+
+    const unsigned NUM_TAGS_DEFINED = 16;
+    const unsigned CTAG_MIN = 0x01;
+    const unsigned CTAG_MAX = 0x0B;
+    const struct correlation_tag_s TAGS[NUM_TAGS_DEFINED] = {
+        /* Tag_00 */{ 0x566ED2717946107ELL,   0,   0,   0,   0, -1 },  //  Reserved
+
+        /* Tag_01 */{ 0xB74DB7DF8A532F3ELL, 255, 239, 255, 239, RS_255_239 },  //  RS(255, 239) 16-byte check value, 239 information bytes
+        /* Tag_02 */{ 0x26FF60A600CC8FDELL, 144, 128, 255, 239, RS_255_239 },  //  RS(144,128) - shortened RS(255, 239), 128 info bytes
+        /* Tag_03 */{ 0xC7DC0508F3D9B09ELL,  80,  64, 255, 239, RS_255_239 },  //  RS(80,64) - shortened RS(255, 239), 64 info bytes
+        /* Tag_04 */{ 0x8F056EB4369660EELL,  48,  32, 255, 239, RS_255_239 },  //  RS(48,32) - shortened RS(255, 239), 32 info bytes
+
+        /* Tag_05 */{ 0x6E260B1AC5835FAELL, 255, 223, 255, 223, RS_255_223 },  //  RS(255, 223) 32-byte check value, 223 information bytes
+        /* Tag_06 */{ 0xFF94DC634F1CFF4ELL, 160, 128, 255, 223, RS_255_223 },  //  RS(160,128) - shortened RS(255, 223), 128 info bytes
+        /* Tag_07 */{ 0x1EB7B9CDBC09C00ELL,  96,  64, 255, 223, RS_255_223 },  //  RS(96,64) - shortened RS(255, 223), 64 info bytes
+        /* Tag_08 */{ 0xDBF869BD2DBB1776LL,  64,  32, 255, 223, RS_255_223 },  //  RS(64,32) - shortened RS(255, 223), 32 info bytes
+
+        /* Tag_09 */{ 0x3ADB0C13DEAE2836LL, 255, 191, 255, 191, RS_255_191 },  //  RS(255, 191) 64-byte check value, 191 information bytes
+        /* Tag_0A */{ 0xAB69DB6A543188D6LL, 192, 128, 255, 191, RS_255_191 },  //  RS(192, 128) - shortened RS(255, 191), 128 info bytes
+        /* Tag_0B */{ 0x4A4ABEC4A724B796LL, 128,  64, 255, 191, RS_255_191 },  //  RS(128, 64) - shortened RS(255, 191), 64 info bytes
+
+        /* Tag_0C */{ 0x0293D578626B67E6LL,   0,   0,   0,   0, -1 },  //  Undefined
+        /* Tag_0D */{ 0xE3B0B0D6917E58A6LL,   0,   0,   0,   0, -1 },  //  Undefined
+        /* Tag_0E */{ 0x720267AF1BE1F846LL,   0,   0,   0,   0, -1 },  //  Undefined
+        /* Tag_0F */{ 0x93210201E8F4C706LL,   0,   0,   0,   0, -1 }   //  Undefined
+    }
+
+    fx25() {
+        // Verify integrity of tables and assumptions.
+        // This also does a quick check for the popcount function.
+        for (int j = 0; j < NUM_TAGS_DEFINED; j++) {
+            for (int k = 0; k < NUM_TAGS_DEFINED; k++) {
+                if (j == k) {
+                    assert(__builtin_popcountll(TAGS[j].value ^ TAGS[k].value) == 0);
+                } else {
+                    assert(__builtin_popcountll(TAGS[j].value ^ TAGS[k].value) == 32);
+                }
+            }
+        }
+
+        for (int j = CTAG_MIN; j <= CTAG_MAX; j++) {
+            assert(TAGS[j].n_block_radio - TAGS[j].k_data_radio == RS_CONFIGS[TAGS[j].rs_config_index].NROOTS);
+            assert(TAGS[j].n_block_rs - TAGS[j].k_data_rs == RS_CONFIGS[TAGS[j].rs_config_index].NROOTS);
+            assert(TAGS[j].n_block_rs == FX25_BLOCK_SIZE);
+        }
+
+        assert(pick_mode(1, 239) == 1);
+        assert(pick_mode(1, 240) == -1);
+
+        assert(pick_mode(5, 223) == 5);
+        assert(pick_mode(5, 224) == -1);
+
+        assert(pick_mode(9, 191) == 9);
+        assert(pick_mode(9, 192) == -1);
+
+        assert(pick_mode(16, 32) == 4);
+        assert(pick_mode(16, 64) == 3);
+        assert(pick_mode(16, 128) == 2);
+        assert(pick_mode(16, 239) == 1);
+        assert(pick_mode(16, 240) == -1);
+
+        assert(pick_mode(32, 32) == 8);
+        assert(pick_mode(32, 64) == 7);
+        assert(pick_mode(32, 128) == 6);
+        assert(pick_mode(32, 223) == 5);
+        assert(pick_mode(32, 234) == -1);
+
+        assert(pick_mode(64, 64) == 11);
+        assert(pick_mode(64, 128) == 10);
+        assert(pick_mode(64, 191) == 9);
+        assert(pick_mode(64, 192) == -1);
+    }
+
+    int pick_mode(int fx_mode, int dlen) const {
+        // Does it look like fx_mode is a direct index to a usable TAGS entry?
+        if (fx_mode >= CTAG_MIN && fx_mode <= CTAG_MAX) {
+            // If so, just return the index back or fail based on whether the dlen will fit
+            return ((dlen <= TAGS[fx_mode].k_data_radio) ? fx_mode : -1);
+        }
+
+        // Otherwise, assume fx_mode is a request for a number of NROOTS,
+        // and find the smallest mode with that number that will fit dlen data
+        for (int k = CTAG_MAX; k >= CTAG_MIN; k--) {
+            if ((fx_mode == RS_CONFIGS[TAGS[k].rs_config_index].NROOTS) &&
+                (dlen <= TAGS[fx_mode].k_data_radio)) {
+                return (k);
+            }
+        }
+        return (-1);
+    }
+
+    // void encode(IoFrame *frame) const {
+    // }
+}
 
