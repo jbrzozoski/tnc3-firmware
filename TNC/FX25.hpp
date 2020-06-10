@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cassert>
 
 //namespace mobilinkd { namespace tnc {
 
@@ -29,12 +30,6 @@ struct rs_config {
     const uint16_t NROOTS; /* Number of generator roots = number of parity symbols */
     const uint16_t NN = ((1<<SYMSIZE)-1); /* Symbols per block */
     const uint16_t A0 = NN;
-    static_assert(SYMSIZE <= (8 * sizeof(DTYPE)));
-    static_assert(FCR < (1 << SYMSIZE));
-    static_assert((PRIM != 0) && (PRIM < (1 << SYMSIZE)));
-    static_assert(NROOTS < (1 << SYMSIZE));
-    static_assert((sizeof(DTYPE) * (NN + 1)) <= MAX_LOG_TABLE_SIZE)
-    static_assert((sizeof(DTYPE) * (NROOTS + 1)) <= MAX_GENPOLY_SIZE)
     uint8_t alpha_to[MAX_LOG_TABLE_SIZE]; /* log lookup table */
     uint8_t index_of[MAX_LOG_TABLE_SIZE]; /* Antilog lookup table */
     uint8_t genpoly[MAX_GENPOLY_SIZE];    /* Generator polynomial */
@@ -49,9 +44,16 @@ struct rs_config {
     }
 
     rs_config(uint16_t symsize, uint16_t gfpoly, uint8_t fcr, uint8_t prim, uint16_t nroots)
-    : SYMSIZE(symsize), GFPOLY(gfpoly), FCR(fcr), PRIM(prim), NROOTS(nroots), alpha_to(0), index_of(0), genpoly(0), iprim(0)
+    : SYMSIZE(symsize), GFPOLY(gfpoly), FCR(fcr), PRIM(prim), NROOTS(nroots), alpha_to(), index_of(), genpoly(), iprim(0)
     {
         int i, j, sr, root;
+
+        assert(SYMSIZE <= (8 * sizeof(DTYPE)));
+        assert(FCR < (1 << SYMSIZE));
+        assert((PRIM != 0) && (PRIM < (1 << SYMSIZE)));
+        assert(NROOTS < (1 << SYMSIZE));
+        assert((sizeof(DTYPE) * (NN + 1)) <= MAX_LOG_TABLE_SIZE);
+        assert((sizeof(DTYPE) * (NROOTS + 1)) <= MAX_GENPOLY_SIZE);
 
         /* Generate Galois field lookup tables */
         index_of[0] = A0; /* log(zero) = -inf */
@@ -137,26 +139,28 @@ struct rs_config {
         DTYPE feedback;
         DTYPE fec_work[NROOTS];
 
-        // Frame_input is expected to be of size NN-NROOTS
+        // Input frame is expected to be of size NN-NROOTS
+        // Generated output will be of size NROOTS
 
-        // clear out the FEC work area
+        // Clear out the FEC work area.
+        // Every iteration of the loop we need to shift the full contents down by one
+        // ex and most of the time also XOR every value.
+        // The old design did the XOR first, then did a memmove.
+        // This design does both the move and the XOR in one operation.
         memset(fec_work, 0, sizeof(fec_work));
 
         for(i = 0; i < (NN-NROOTS); i++) {
-            // TODO - With a second fec_work array we could skip all the memmove
-            // work by just ping-ponging back and forth during the XOR for loop
             feedback = index_of[input[i] ^ fec_work[0]];
-            /* feedback term is non-zero */
-            if(feedback != A0) {
+            if (feedback != A0) {
+                // Feedback is non-zero, so we XOR everything as we shift the contents
                 for(j = 1; j < NROOTS; j++) {
-                    fec_work[j] ^= alpha_to[modnn(feedback + genpoly[NROOTS-j])];
+                    fec_work[j-1] = fec_work[j] ^ alpha_to[modnn(feedback + genpoly[NROOTS-j])];
                 }
-            }
-            /* Shift */
-            memmove(&fec_work[0], &fec_work[1], sizeof(DTYPE)*(NROOTS-1));
-            if(feedback != A0) {
                 fec_work[NROOTS-1] = alpha_to[modnn(feedback + genpoly[0])];
-            } else {
+            }
+            else {
+                // Feedback is zero, so we just shift the contents
+                memmove(&fec_work[0], &fec_work[1], sizeof(DTYPE)*(NROOTS-1));
                 fec_work[NROOTS-1] = 0;
             }
         }
@@ -166,7 +170,7 @@ struct rs_config {
         //for (i = 0; i < NROOTS; i++) {
         //    bb.push_back(fec_work[i]);
         //}
-        memcpy(output, fec_work, sizeof(fec_work));
+        memcpy(output, &fec_work[0], sizeof(DTYPE)*NROOTS);
     }
 };
 
